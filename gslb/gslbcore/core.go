@@ -35,6 +35,7 @@ type Config struct {
 
 type RegionState struct {
 	info       types.RegionInfo
+	opstate    []*types.PoPStatus
 	popLatency []float64
 }
 
@@ -217,5 +218,29 @@ func (c *GslbCore) Query(srcIP netip.Addr) []netip.Addr {
 	defer c.mu.Unlock()
 
 	// FIXME(student): Implement your own query logic
-	return []netip.Addr{c.cfg.Pops[0].Ip4}
+	minIndex := 0
+outer:
+	// 登録されているregionの数だけループ
+	for _, region := range c.regions {
+		// クライアントのIPアドレスと一致するregionを特定
+		for _, prefix := range region.info.Prefices {
+			if prefix.Contains(srcIP) {
+				slog.Info("Query",
+					slog.String("region", region.info.Id),
+					slog.String("prefix", prefix.String()),
+					"latency", region.popLatency)
+				// クライアントのregionと各PoP間のlatencyの最小値を求める
+				minValue := region.popLatency[0]
+				for i, latency := range region.popLatency {
+					if latency < minValue {
+						minValue = latency
+						minIndex = i // 最小値のindexを保存
+					}
+				}
+				break outer
+			}
+		}
+	}
+
+	return []netip.Addr{c.cfg.Pops[minIndex].Ip4}
 }
